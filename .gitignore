@@ -218,3 +218,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+data/nuscenes/
+*.pkl
+*.bin
+
+outputs/*.png
+outputs/*.mp4
+__pycache__/
+*.pyc
+.env
+wandb/
+*.egg-info/
+dist/
+.DS_Store

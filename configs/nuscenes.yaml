@@ -1,0 +1,3 @@
+data_root: ./data/nuscenes
+version: v1.0-mini
+output_dir: ./outputs
