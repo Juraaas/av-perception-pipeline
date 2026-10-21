@@ -224,6 +224,8 @@ data/nuscenes/
 *.bin
 
 outputs/*.png
+!outputs/*.gif
+!outputs/lidar_cam_front.png
 outputs/*.mp4
 __pycache__/
 *.pyc
