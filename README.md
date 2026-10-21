@@ -17,7 +17,7 @@ Multi-sensor perception system for autonomous driving built on nuScenes.
 
 ## Demo
 
-### Multi-object tracking — CAM_FRONT
+### Multi-object tracking
 ![Tracking demo](outputs/tracking_demo.gif)
 
 ### LiDAR projected onto camera
