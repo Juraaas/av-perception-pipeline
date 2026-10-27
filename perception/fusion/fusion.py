@@ -63,8 +63,7 @@ def fit_3d_box(points_3d):
     # Vt[1] = second component = the transverse axis
     main_axis = Vt[0]  # direction of the object’s orientation
 
-    # Yaw angle — rotation in the XY plane (top view)
-    yaw = np.arctan2(main_axis[1], main_axis[0])
+    yaw = np.arctan2(main_axis[0], main_axis[2])
 
     # Project the points onto the PCA axes to obtain the dimensions
     proj_main = centered @ Vt[0]
@@ -74,6 +73,12 @@ def fit_3d_box(points_3d):
     length = proj_main.max() - proj_main.min()
     width = proj_side.max() - proj_side.min()
     height = proj_up.max() - proj_up.min()
+
+    MAX_DIMS = {
+        'car': (5.0, 2.5), 'truck': (12.0, 3.0),
+        'person': (1.0, 1.0), 'bicycle': (2.0, 1.0),
+        'motorcycle': (2.5, 1.0), 'bus': (15.0, 3.5)
+    }
 
     return {
         'center': center,
@@ -132,7 +137,6 @@ def visualize_fusion(img, pts_cam, u_lidar, v_lidar, boxes_3d, cam_channel, samp
 
     ax1 = fig.add_subplot(1, 2, 1)
     ax1.imshow(img)
-
     depth = pts_cam[:, 2]
     ax1.scatter(u_lidar, v_lidar, c=depth, cmap='plasma', s=1.5, alpha=0.5, vmin=0, vmax=50)
 
@@ -147,75 +151,75 @@ def visualize_fusion(img, pts_cam, u_lidar, v_lidar, boxes_3d, cam_channel, samp
                  f"d={b['center'][2]:.1f}m | pts={b['n_points']}",
                  color='white', fontsize=8, fontweight='bold', 
                  bbox=dict(facecolor=color, alpha=0.7, pad=2))
-        ax1.set_title(f'Camera + LiDAR fusion - {cam_channel}', fontsize=11)
-        ax1.axis('off')
+    ax1.set_title(f'Camera + LiDAR fusion - {cam_channel}', fontsize=11)
+    ax1.axis('off')
 
-        ax2 = fig.add_subplot(1, 2, 2)
-        ax2.set_facecolor('#1a1a2e')
-        ax2.set_xlim(-20, 20)
-        ax2.set_ylim(0, 50)
-        ax2.set_xlabel('Lateral (m)', color='white')
-        ax2.set_ylabel('Forward (m)', color='white')
-        ax2.set_title('Bird\'s Eye View (BEV)', fontsize=11, color='white')
-        ax2.tick_params(colors='white')
-        ax2.grid(color='#333355', alpha=0.5)
+    ax2 = fig.add_subplot(1, 2, 2)
+    ax2.set_facecolor('#1a1a2e')
+    ax2.set_xlim(-20, 20)
+    ax2.set_ylim(0, 50)
+    ax2.set_xlabel('Lateral (m)', color='white')
+    ax2.set_ylabel('Forward (m)', color='white')
+    ax2.set_title('Bird\'s Eye View (BEV)', fontsize=11, color='white')
+    ax2.tick_params(colors='white')
+    ax2.grid(color='#333355', alpha=0.5)
 
-        ego = patches.Rectangle((-1, -2), 2, 4, color='white', alpha=0.9, zorder=5)
-        ax2.add_patch(ego)
-        ax2.text(0, -1, 'EGO', ha='center', va='center', color='black', fontsize=8, fontweight='bold', zorder=6)
+    ego = patches.Rectangle((-1, -2), 2, 4, color='white', alpha=0.9, zorder=5)
+    ax2.add_patch(ego)
+    ax2.text(0, -1, 'EGO', ha='center', va='center', color='black', fontsize=8, fontweight='bold', zorder=6)
 
-        for r in [10, 20, 30, 40]:
-            circle = plt.Circle((0, 0), r, fill=False, color='#334466', linewidth=0.8)
-            ax2.add_patch(circle)
-            ax2.text(r + 0.3, 0.5, f'{r}m', color='#556688', fontsize=7)
+    for r in [10, 20, 30, 40]:
+        circle = plt.Circle((0, 0), r, fill=False, color='#334466', linewidth=0.8)
+        ax2.add_patch(circle)
+        ax2.text(r + 0.3, 0.5, f'{r}m', color='#556688', fontsize=7)
 
-        ax2.scatter(pts_cam[:, 0], pts_cam[:, 2], s=0.5, alpha=0.3, color='#446688')
+    ax2.scatter(pts_cam[:, 0], pts_cam[:, 2], s=0.5, alpha=0.3, color='#446688')
 
-        for b in boxes_3d:
-            cx, cy, cz = b['center']
-            color = CLASS_COLORS.get(b['label'], 'white')
+    for b in boxes_3d:
+        cx, cy, cz = b['center']
+        color = CLASS_COLORS.get(b['label'], 'white')
 
-            l, w = b['length'], b['width']
-            yaw = b['yaw']
+        l, w = b['length'], b['width']
+        yaw = b['yaw']
 
-            corners = np.array([
-                [-l/2, -w/2],
-                [ l/2, -w/2],
-                [ l/2,  w/2],
-                [-l/2,  w/2],
-            ])
+        corners = np.array([
+            [-l/2, -w/2],
+            [ l/2, -w/2],
+            [ l/2,  w/2],
+            [-l/2,  w/2],
+        ])
 
-            R_yaw = np.array([[np.cos(yaw), -np.sin(yaw)],
-                              [np.sin(yaw), np.cos(yaw)]])
-            corners_rot = (R_yaw @ corners.T).T
-            corners_bev = corners_rot + np.array([cx, cz])
+        R_yaw = np.array([[np.cos(yaw), -np.sin(yaw)],
+                            [np.sin(yaw), np.cos(yaw)]])
+        corners_rot = (R_yaw @ corners.T).T
+        corners_bev = corners_rot + np.array([cx, cz])
 
-            poly = patches.Polygon(corners_bev, closed=True, linewidth=2,
-                                   edgecolor=color, facecolor=color, alpha=0.3)
-            ax2.add_patch(poly)
+        poly = patches.Polygon(corners_bev, closed=True, linewidth=2,
+                                edgecolor=color, facecolor=color, alpha=0.3)
+        ax2.add_patch(poly)
 
-            arrow_len = max(l, 1.5)
-            dx = np.cos(yaw) * arrow_len
-            dz = np.sin(yaw) * arrow_len
-            ax2.annotate('', xy=(cx + dx, cz + dz), xytext=(cx, cz), 
-                         arrowprops=dict(arrowstyle='->', color=color, lw=2))
-            ax2.text(cx, cz + w/2 + 0.5,
-                     f"{b['label']}\n{cz:.1f}m",
-                     color=color, fontsize=7, ha='center', fontweight='bold')
+        arrow_len = max(l, 1.5)
+        dx = np.sin(yaw) * arrow_len
+        dz = np.cos(yaw) * arrow_len
+        ax2.annotate('', xy=(cx + dx, cz + dz), xytext=(cx, cz), 
+                        arrowprops=dict(arrowstyle='->', color=color, lw=2))
+        ax2.text(cx, cz + w/2 + 0.5,
+                    f"{b['label']}\n{cz:.1f}m",
+                    color=color, fontsize=7, ha='center', fontweight='bold')
 
-        for spine in ax2.spines.values():
-            spine.set_edgecolor('#334466')
+    for spine in ax2.spines.values():
+        spine.set_edgecolor('#334466')
 
-        plt.tight_layout()
-        plt.savefig('outputs/fusion_bev.png', dpi=150,
-                    bbox_inches='tight', facecolor='#0d0d1a')
-        plt.show()
-        print(f"\nDetected 3D objects: {len(boxes_3d)}")
-        for b in boxes_3d:
-            print(f"  {b['label']:10s} | "
-                f"dist={b['center'][2]:.1f}m | "
-                f"L={b['length']:.1f}m W={b['width']:.1f}m | "
-                f"pts={b['n_points']}")
+    plt.tight_layout()
+    plt.savefig('outputs/fusion_bev.png', dpi=150,
+                bbox_inches='tight', facecolor='#0d0d1a')
+    plt.show()
+    print(f"\nDetected 3D objects: {len(boxes_3d)}")
+    for b in boxes_3d:
+        print(f"  {b['label']:10s} | "
+            f"dist={b['center'][2]:.1f}m | "
+            f"L={b['length']:.1f}m W={b['width']:.1f}m | "
+            f"pts={b['n_points']}")
 
 
 sample_token = nusc.sample[0]['token']
