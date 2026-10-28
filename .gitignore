@@ -224,8 +224,11 @@ data/nuscenes/
 *.bin
 
 outputs/*.png
+outputs/tracking_3d/*.png
 !outputs/*.gif
 !outputs/lidar_cam_front.png
+!outputs/fusion_bev.png
+!outputs/optical_flow.png
 outputs/*.mp4
 __pycache__/
 *.pyc
