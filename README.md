@@ -27,7 +27,7 @@ built on the nuScenes dataset.
 
 ## Demo
 
-### Camera–LiDAR Fusion + BEV
+### Camera-LiDAR Fusion + BEV
 ![Fusion BEV](outputs/fusion_bev.png)
 
 ### 3D Multi-Object Tracking (BEV)
@@ -57,7 +57,7 @@ Consecutive frames ───────▶ Optical Flow (RAFT)
 
 ```bash
 python -m venv venv
-venv\Scripts\activate # Windows
+venv\Scripts\activate.bat
 pip install -r requirements.txt
 ```
 
