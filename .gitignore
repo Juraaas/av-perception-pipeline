@@ -230,6 +230,7 @@ outputs/tracking_3d/*.png
 !outputs/fusion_bev.png
 !outputs/optical_flow.png
 outputs/*.mp4
+eval/results/
 __pycache__/
 *.pyc
 .env
