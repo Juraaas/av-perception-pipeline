@@ -116,3 +116,34 @@ outputs/ # Generated images, GIFs
 - Replace projection fusion with proper BEV transformation (BEVFusion-style)
 - Add official nuScenes evaluation: mAP, NDS, AMOTA
 - Extend to full trainval split for quantitative comparison
+
+## Evaluation (nuScenes mini_val, camera-only baseline)
+
+Detector: YOLOv8m (COCO classes mapped to nuScenes). 2D boxes are lifted to 3D
+using a depth estimate; box size is a per-class constant and orientation is
+copied from the ego pose, so this is a deliberately simple baseline.
+
+| Version | Depth source | mAP | NDS |
+|---------|--------------|-----|-----|
+| v1 | Box-height heuristic (pinhole model, known class height) | 0.0797 | 0.1095 |
+| v2 | Depth Anything V2 (metric, outdoor) | 0.0268 | 0.0461 |
+
+### Why v2 is worse than v1
+I measured both depth sources against LiDAR (`eval/depth_diagnostics.py`,
+164 boxes):
+
+| | median(pred/LiDAR) | AbsRel | within 25% |
+|---|---|---|---|
+| Height heuristic | 1.09 | 0.16 | 81% |
+| Depth Anything V2 metric | 1.48 | 0.58 | 21% |
+
+Depth Anything overestimates distance by ~50% on nuScenes, consistent with a
+domain gap (the model is trained on synthetic Virtual KITTI). nuScenes matches
+detections by center distance with thresholds up to 4 m, so errors of several
+metres remove almost all true positives.
+
+Limitation: objects beyond ~30 m had too few LiDAR points to be verified.
+
+### Next
+v3 will take depth directly from LiDAR points inside each 2D box (camera-LiDAR
+fusion), which is where the earlier fusion module comes in.
