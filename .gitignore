@@ -238,3 +238,4 @@ wandb/
 *.egg-info/
 dist/
 .DS_Store
+practice/*
