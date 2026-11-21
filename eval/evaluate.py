@@ -12,6 +12,12 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 import sys
 DEPTH_MODE = sys.argv[1] if len(sys.argv) > 1 else 'heuristic'
+assert DEPTH_MODE in ('heuristic', 'dav2', 'lidar')
+FALLBACK_LOG = []  
+LIDAR_PERCENTILE = float(sys.argv[2]) if len(sys.argv) > 2 else 50
+STATS = {'model': 0, 'fallback': 0}
+from collections import defaultdict
+STATS_CAT = defaultdict(lambda: {'model': 0, 'fallback': 0})
 
 nusc = NuScenes(version='v1.0-mini', dataroot='./data/nuscenes', verbose=False)
 model = YOLO('yolov8m.pt')
@@ -51,6 +57,16 @@ def box_depth(depth_map, box):
                       max(x1 + bw//4, 0):min(x2 - bw//4, w)]
     return float(np.median(patch)) if patch.size else None
 
+
+def lidar_box_depth(u, v, d, box, q=50, min_pts=5, shrink=0.25):
+    """The q-percentile of LiDAR point depths in the central part of the box."""
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    m = ((u > x1 + shrink*bw) & (u < x2 - shrink*bw) &
+         (v > y1 + shrink*bh) & (v < y2 - shrink*bh))
+    return float(np.percentile(d[m], q)) if m.sum() >= min_pts else None
+
+FLAGS = set(sys.argv[3:]) 
 
 def get_camera_intrinsics(nusc, sample_token, cam_channel):
     sample = nusc.get('sample', sample_token)
@@ -121,6 +137,11 @@ def run_detection_on_scene(nusc, scene_idx=0):
 
             depth_map = predict_metric_depth(img_path) if DEPTH_MODE == 'dav2' else None
 
+            if DEPTH_MODE == 'lidar':
+                pts, lidar_d, _ = nusc.explorer.map_pointcloud_to_image(
+                    sample['data']['LIDAR_TOP'], sample['data'][cam_channel])
+                lu, lv = pts[0], pts[1]
+
             detections = model(img_path, conf=0.25, verbose=False)[0]
 
             for box in detections.boxes:
@@ -139,6 +160,14 @@ def run_detection_on_scene(nusc, scene_idx=0):
                 depth = None
                 if DEPTH_MODE == 'dav2':
                     depth = box_depth(depth_map, (x1, y1, x2, y2))
+                elif DEPTH_MODE == 'lidar':
+                    if 'adaptive' in FLAGS and (y2 - y1) < 60:
+                        depth = lidar_box_depth(lu, lv, lidar_d, (x1, y1, x2, y2), q=25, min_pts=3, shrink=0.0)
+                    else:
+                        depth = lidar_box_depth(lu, lv, lidar_d, (x1, y1, x2, y2), q=LIDAR_PERCENTILE)
+                STATS['model' if depth is not None else 'fallback'] += 1
+                STATS_CAT[category]['model' if depth is not None else 'fallback'] += 1
+                FALLBACK_LOG.append((category, float(y2 - y1), depth is not None))   
                 if depth is None:
                     box_height_px = y2 - y1
                     depth = K[1, 1] * REAL_HEIGHT[category] / max(box_height_px, 1.0)
@@ -170,7 +199,7 @@ def evaluate(results_dict, output_dir='eval/results'):
     submission = {
         'meta': {
             'use_camera': True,
-            'use_lidar': False,
+            'use_lidar': DEPTH_MODE == 'lidar',
             'use_radar': False,
             'use_map': False,
             'use_external': False,
@@ -220,5 +249,18 @@ for idx in val_scene_idxs:
 print(f"\nNumber of samples: {len(results)}")
 print(f"Number of detections: {sum(len(v) for v in results.values())}")
 
-metrics = evaluate(results, output_dir=f'eval/results/{DEPTH_MODE}')
+suffix = ('_' + '_'.join(sorted(FLAGS))) if FLAGS else ''
+out = (f'eval/results/lidar_p{int(LIDAR_PERCENTILE)}{suffix}'
+       if DEPTH_MODE == 'lidar' else f'eval/results/{DEPTH_MODE}')
+metrics = evaluate(results, output_dir=out)
 print(metrics.tp_errors)
+print(metrics._label_aps['car'])
+print(STATS)
+print(dict(STATS_CAT))
+
+log = np.array([(h, used) for _, h, used in FALLBACK_LOG], dtype=float)
+for lo, hi in [(0, 30), (30, 60), (60, 120), (120, 10_000)]:
+    m = (log[:, 0] >= lo) & (log[:, 0] < hi)
+    if m.sum():
+        print(f"wysokość {lo}-{hi}px: n={int(m.sum())}, "
+              f"fallback={100 * (1 - log[m, 1].mean()):.0f}%")
