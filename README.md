@@ -125,8 +125,10 @@ copied from the ego pose, so this is a deliberately simple baseline.
 
 | Version | Depth source | mAP | NDS |
 |---------|--------------|-----|-----|
-| v1 | Box-height heuristic (pinhole model, known class height) | 0.0797 | 0.1095 |
-| v2 | Depth Anything V2 (metric, outdoor) | 0.0268 | 0.0461 |
+| v1 | Box-height heuristic | 0.0797 | 0.1095 |
+| v2 | Depth Anything V2 (metric) | 0.0268 | 0.0461 |
+| v3 | LiDAR points in box (median), heuristic fallback | 0.1128 | 0.1030 |
+| v3b | v3 + larger patch and lower point threshold for small boxes | 0.1181 | 0.1051 |
 
 ### Why v2 is worse than v1
 I measured both depth sources against LiDAR (`eval/depth_diagnostics.py`,
@@ -144,6 +146,34 @@ metres remove almost all true positives.
 
 Limitation: objects beyond ~30 m had too few LiDAR points to be verified.
 
-### Next
-v3 will take depth directly from LiDAR points inside each 2D box (camera-LiDAR
-fusion), which is where the earlier fusion module comes in.
+### v3: LiDAR depth
+About half of the boxes (51%) get depth from LiDAR, the rest fall back to the heuristic.
+
+| Class | v1 AP | v3 AP |
+|---|---|---|
+| car | 0.223 | 0.220 |
+| truck | 0.151 | 0.275 |
+| bus | 0.142 | 0.127 |
+| pedestrian | 0.230 | 0.301 |
+| motorcycle | 0.051 | 0.130 |
+| bicycle | 0.001 | 0.075 |
+
+LiDAR depth helps trucks, pedestrians and two-wheelers, while cars are unchanged.
+
+### Why so many fallbacks?
+The share of boxes without enough LiDAR points depends strongly on box size:
+
+| Box height | Boxes | Fallback |
+|---|---|---|
+| < 30 px | 237 | 97% |
+| 30-60 px | 1080 | 87% |
+| 60-120 px | 1573 | 51% |
+| > 120 px | 1343 | 6% |
+
+My hypothesis is that LiDAR rings are sparse in the image at long range, so the
+central patch of a small box rarely contains enough points. v3b tests this.
+
+### Caveats
+- NDS did not improve with mAP: velocity error crossed the cap of 1 because I always predict zero velocity.
+- Only two validation scenes, so differences of about 0.01 mAP are within noise.
+- The LiDAR percentile was chosen on the same scenes used for evaluation.
